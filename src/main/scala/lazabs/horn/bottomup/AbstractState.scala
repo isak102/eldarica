@@ -33,6 +33,7 @@ import ap.terfor.preds.Predicate
 import ap.terfor.conjunctions.Conjunction
 
 import scala.collection.mutable.PriorityQueue
+import java.util.concurrent.PriorityBlockingQueue
 
 import lazabs.horn.Util._
 
@@ -95,50 +96,52 @@ import lazabs.horn.Util._
       }
   }
   
+
   class PriorityStateQueue extends StateQueue {
     type TimeType = Int
 
     private var time = 0
 
-    private def priority(s : Expansion) = {
-      val (states, NormClause(_, _, (RelationSymbol(headSym), _)), _,
-           birthTime) = s
-      (headSym match {
+    private def priority(s: Expansion): Int = {
+      val (states, NormClause(_, _, (RelationSymbol(headSym), _)), _, birthTime) = s
+      val basePriority = headSym match {
         case HornClauses.FALSE => -10000
         case _ => 0
-       }) + (
-        for (AbstractState(_, preds) <- states.iterator)
-        yield preds.size).sum +
-      birthTime
+      }
+      val totalPredsSize = (for (AbstractState(_, preds) <- states.iterator) yield preds.size).sum
+      basePriority + totalPredsSize + birthTime
     }
 
     private implicit val ord = new Ordering[Expansion] {
-      def compare(s : Expansion, t : Expansion) =
-        priority(t) - priority(s)
+      override def compare(s: Expansion, t: Expansion): Int = priority(t) - priority(s)
     }
 
-    private val states = new PriorityQueue[Expansion]
+    private val states = new PriorityBlockingQueue[Expansion](20, ord) // TODO: maybe change capacity
 
-    def isEmpty : Boolean =
-      states.isEmpty
-    def size : Int =
-      states.size
-    def enqueue(s : Seq[AbstractState],
-                clause : NormClause, assumptions : Conjunction) : Unit = {
-      states += ((s, clause, assumptions, time))
+    def isEmpty: Boolean = states.isEmpty
+    def size: Int = states.size()
+
+    def enqueue(s: Seq[AbstractState], clause: NormClause, assumptions: Conjunction): Unit = {
+      states.offer((s, clause, assumptions, time))
     }
-    def enqueue(exp : Expansion) : Unit = {
-      states += exp
+
+    def enqueue(exp: Expansion): Unit = {
+      states.offer(exp)
     }
-    def dequeue : Expansion =
-      states.dequeue
-    def removeGarbage(reachableStates : scala.collection.Set[AbstractState]) = {
-      val remainingStates = (states.iterator filter {
-        case (s, _, _, _) => s forall (reachableStates contains _)
-      }).toArray
-      states.dequeueAll
-      states ++= remainingStates
+
+    def dequeue: Expansion = {
+      states.poll()
     }
-    override def incTime : Unit =
-      time = time + 1
+
+    def removeGarbage(reachableStates: scala.collection.Set[AbstractState]): Unit = {
+      val remainingStates = states.toArray(new Array[Expansion](states.size())).filter {
+        case (s: Seq[AbstractState], _, _, _) => s.forall(reachableStates.contains)
+      }
+      states.clear()
+      remainingStates.foreach(states.offer)
+    }
+
+    override def incTime: Unit = this.synchronized {
+      time += 1
+    }
   }
