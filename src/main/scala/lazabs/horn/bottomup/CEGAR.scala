@@ -47,6 +47,12 @@ import scala.collection.mutable.{LinkedHashSet, LinkedHashMap, ArrayBuffer,
                                  HashSet => MHashSet, HashMap => MHashMap,
                                  ArrayStack}
 import scala.util.Sorting
+import java.util.concurrent.ConcurrentLinkedQueue
+import scala.concurrent.Future
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.util.Success
+import scala.util.Failure
+import java.util.concurrent.atomic.AtomicInteger
 
 object CEGAR {
 
@@ -104,6 +110,10 @@ class CEGAR[CC <% HornClauses.ConstraintClause]
   val abstractEdges =
     new ArrayBuffer[AbstractEdge]
 
+  // Holds the results from the futures so they can be processed in the main thread
+  val resultsQueue = new ConcurrentLinkedQueue[Either[AbstractEdge, Tuple5[Counterexample, Seq[AbstractState], NormClause, Conjunction, Int]]]
+  val activeTasks = new AtomicInteger(0)
+
   //////////////////////////////////////////////////////////////////////////////
 
   val nextToProcess = new CEGARStateQueue
@@ -135,44 +145,18 @@ class CEGAR[CC <% HornClauses.ConstraintClause]
 
     var postponedExpansionCount = 0
 
-    while (!nextToProcess.isEmpty && res == null) {
+    while ((!nextToProcess.isEmpty || activeTasks.get() > 0) && res == null) {
       lazabs.GlobalParameters.get.timeoutChecker()
 
-/*
-      // The invariants supposed to be preserved by the subsumption mechanism
-      assert(
-        (maxAbstractStates forall {
-          case (rs, preds) => (preds subsetOf activeAbstractStates(rs)) &&
-                              (preds forall { s => activeAbstractStates(rs) forall {
-                                                   t => s == t || !subsumes(t, s) } }) }) &&
-        (backwardSubsumedStates forall {
-          case (s, t) => s != t && subsumes(t, s) &&
-                         (activeAbstractStates(s.rs) contains s) &&
-                         !(maxAbstractStates(s.rs) contains s) &&
-                         (activeAbstractStates(t.rs) contains t) }) &&
-        (forwardSubsumedStates forall {
-          case (s, t) => s != t && subsumes(t, s) &&
-                         !(activeAbstractStates(s.rs) contains s) &&
-                         (activeAbstractStates(t.rs) contains t) }) &&
-        (activeAbstractStates forall {
-          case (rs, preds) =>
-                         preds forall { s => (maxAbstractStates(rs) contains s) ||
-                         (backwardSubsumedStates contains s) } }) &&
-        (postponedExpansions forall {
-          case (from, _, _, _) => from exists (backwardSubsumedStates contains _) })
-      )
-*/
+      if (!resultsQueue.isEmpty()) {
+        // we have a result that needs to be handled
+        val result = resultsQueue.poll()
 
-      val expansion@(states, clause, assumptions, _) = nextToProcess.dequeue
-
-      if (states exists (backwardSubsumedStates contains _)) {
-        postponedExpansions += expansion
-      } else {
-        try {
-          for (e <- genEdge(clause, states, assumptions))
-            addEdge(e)
-        } catch {
-          case Counterexample(from, clause) => {
+        result match {
+          case Left(edge) => {
+            addEdge(edge)
+          }
+          case Right((Counterexample(from, clause), states, _, assumptions, n)) => {
             if (postponedExpansionCount > nextToProcess.size)
               throw new Exception("Predicate generation failed")
 
@@ -205,10 +189,42 @@ class CEGAR[CC <% HornClauses.ConstraintClause]
               case Left(newPredicates) => {
                 if (lazabs.GlobalParameters.get.log)
                   println(" ... adding predicates:")
-                if (addPredicates(newPredicates, expansion))
+                if (addPredicates(newPredicates, (states, clause, assumptions, n)))
                   postponedExpansionCount = 0
                 else
                   postponedExpansionCount = postponedExpansionCount + 1
+              }
+            }
+          }
+        }
+      } else {
+        val expansion@(states, clause, assumptions, n) = nextToProcess.dequeue
+
+        if (states exists (backwardSubsumedStates contains _)) {
+          postponedExpansions += expansion
+        } else {
+          println("Starting future")
+          activeTasks.incrementAndGet()
+          Future {
+            genEdge(clause, states, assumptions)
+          }.onComplete {
+            case Success(res) => {
+              activeTasks.decrementAndGet()
+              res match {
+                case Some(edge) => resultsQueue.offer(Left(edge))
+                case None => ()
+              }
+            }
+            case Failure(exception) => {
+              activeTasks.decrementAndGet()
+              exception match {
+                case Counterexample(from, clause) => {
+                  resultsQueue.offer(Right((Counterexample(from, clause), states, clause, assumptions, n)))
+                }
+                case _ => {
+                  // TODO: what to do here ?
+                  throw exception
+                }
               }
             }
           }
