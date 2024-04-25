@@ -198,32 +198,34 @@ class CEGAR[CC <% HornClauses.ConstraintClause]
           }
         }
       } else {
-        val expansion@(states, clause, assumptions, n) = nextToProcess.dequeue
+        if (!nextToProcess.isEmpty) {
+          val expansion@(states, clause, assumptions, n) = nextToProcess.dequeue
 
-        if (states exists (backwardSubsumedStates contains _)) {
-          postponedExpansions += expansion
-        } else {
-          println("Starting future")
-          activeTasks.incrementAndGet()
-          Future {
-            genEdge(clause, states, assumptions)
-          }.onComplete {
-            case Success(res) => {
-              activeTasks.decrementAndGet()
-              res match {
-                case Some(edge) => resultsQueue.offer(Left(edge))
-                case None => ()
-              }
-            }
-            case Failure(exception) => {
-              activeTasks.decrementAndGet()
-              exception match {
-                case Counterexample(from, clause) => {
-                  resultsQueue.offer(Right((Counterexample(from, clause), states, clause, assumptions, n)))
+          if (states exists (backwardSubsumedStates contains _)) {
+            postponedExpansions += expansion
+          } else {
+            println("Starting future")
+            activeTasks.incrementAndGet()
+            Future {
+              genEdge(clause, states, assumptions)
+            }.onComplete {
+              case Success(res) => {
+                activeTasks.decrementAndGet()
+                res match {
+                  case Some(edge) => resultsQueue.offer(Left(edge))
+                  case None => ()
                 }
-                case _ => {
-                  // TODO: what to do here ?
-                  throw exception
+              }
+              case Failure(exception) => {
+                activeTasks.decrementAndGet()
+                exception match {
+                  case Counterexample(from, clause) => {
+                    resultsQueue.offer(Right((Counterexample(from, clause), states, clause, assumptions, n)))
+                  }
+                  case _ => {
+                    // TODO: what to do here ?
+                    throw exception
+                  }
                 }
               }
             }
