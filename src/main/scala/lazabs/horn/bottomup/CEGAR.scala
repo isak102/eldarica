@@ -211,7 +211,8 @@ class CEGAR[CC <% HornClauses.ConstraintClause]
             postponedExpansions += expansion
           } else {
             println("Starting future")
-            activeTasks.incrementAndGet()
+            val n = activeTasks.incrementAndGet()
+            println("Active tasks incremented to: " + n)
             Future {
               genEdge(clause, states, assumptions)
             }.onComplete {
@@ -225,7 +226,8 @@ class CEGAR[CC <% HornClauses.ConstraintClause]
                     println("Future completed, no edge")
                   }
                 }
-                activeTasks.decrementAndGet()
+                val n = activeTasks.decrementAndGet()
+                println("Active tasks decremented to: " + n)
               }
               case Failure(exception) => {
                 exception match {
@@ -239,7 +241,8 @@ class CEGAR[CC <% HornClauses.ConstraintClause]
                     throw exception
                   }
                 }
-                activeTasks.decrementAndGet()
+                val nTasks = activeTasks.decrementAndGet()
+                println("Active tasks decremented to: " + nTasks)
               }
             }
           }
