@@ -145,18 +145,24 @@ class CEGAR[CC <% HornClauses.ConstraintClause]
 
     var postponedExpansionCount = 0
 
-    while ((!nextToProcess.isEmpty || activeTasks.get() > 0) && res == null) {
+    // dont exit if resultsQueue is not empty
+    while ((!nextToProcess.isEmpty || activeTasks.get() > 0 || !resultsQueue.isEmpty()) && res == null) {
+      // println("nextToProcess length: " + nextToProcess.size + ", activeTasks: " + activeTasks.get() + ", resultsQueue: " + resultsQueue.size())
+
       lazabs.GlobalParameters.get.timeoutChecker()
 
       if (!resultsQueue.isEmpty()) {
         // we have a result that needs to be handled
         val result = resultsQueue.poll()
+        println("Handling result")
 
         result match {
           case Left(edge) => {
+            println("Got edge")
             addEdge(edge)
           }
           case Right((Counterexample(from, clause), states, _, assumptions, n)) => {
+            println("Got Counterexample")
             if (postponedExpansionCount > nextToProcess.size)
               throw new Exception("Predicate generation failed")
 
@@ -210,23 +216,30 @@ class CEGAR[CC <% HornClauses.ConstraintClause]
               genEdge(clause, states, assumptions)
             }.onComplete {
               case Success(res) => {
-                activeTasks.decrementAndGet()
                 res match {
-                  case Some(edge) => resultsQueue.offer(Left(edge))
-                  case None => ()
+                  case Some(edge) => {
+                    println("Future completed, got edge")
+                    resultsQueue.offer(Left(edge))
+                  }
+                  case None => {
+                    println("Future completed, no edge")
+                  }
                 }
+                activeTasks.decrementAndGet()
               }
               case Failure(exception) => {
-                activeTasks.decrementAndGet()
                 exception match {
                   case Counterexample(from, clause) => {
+                    println("Future completed, got edge")
                     resultsQueue.offer(Right((Counterexample(from, clause), states, clause, assumptions, n)))
                   }
                   case _ => {
                     // TODO: what to do here ?
+                    println("Exception: " + exception)
                     throw exception
                   }
                 }
+                activeTasks.decrementAndGet()
               }
             }
           }
