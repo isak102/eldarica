@@ -41,3 +41,5 @@ project/metals.sbt
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+*test_result.txt

@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+
+OUTPUT_FILE="test_result.txt"
+SCRIPT_DIR=$(dirname "$(realpath "$0")")
+
+TEST_PATTERN="lazabs.horn*|\.smt2|\.horn"
+
+cd "$SCRIPT_DIR" || exit
+
+total_count=0
+total_correct=0
+function test_subdirectory() {
+    local subdirectory="$1"
+
+    echo "Checking $subdirectory"
+    cd "$subdirectory" || exit
+
+    ./runtests | tee "$OUTPUT_FILE"
+
+    declare -A correct_answers
+    while IFS= read -r line; do
+        if [[ "$line" =~ $TEST_PATTERN ]]; then
+            # Start capturing for a new test case
+            current_test="$line"
+            correct_answers["$current_test"]="" # Initialize array entry
+        elif [[ -n "$current_test" ]]; then
+            # Append line to the current test case entry in the array
+            correct_answers["$current_test"]+="$line"$'\n'
+        fi
+    done <<<"$(cat Answers)"
+
+    declare -A output_answers
+    while IFS= read -r line; do
+        if [[ "$line" =~ $TEST_PATTERN ]]; then
+            # Start capturing for a new test case
+            current_test="$line"
+            output_answers["$current_test"]="" # Initialize array entry
+        elif [[ -n "$current_test" ]]; then
+            # Append line to the current test case entry in the array
+            output_answers["$current_test"]+="$line"$'\n'
+        fi
+    done <<<"$(cat "$OUTPUT_FILE")"
+
+    echo -e "\nComparing $subdirectory test results..."
+    correct=0
+    for test_case in "${!correct_answers[@]}"; do
+        if [[ "${correct_answers[$test_case]}" == "${output_answers[$test_case]}" ]]; then
+            echo "PASS - $test_case"
+            correct=$((correct + 1))
+            total_correct=$((total_correct + 1))
+        else
+            echo "FAIL - $test_case"
+        fi
+        total_count=$((total_count + 1))
+    done
+    echo -e "\nRESULTS: $correct/${#correct_answers[@]} PASS.\n"
+    cd ..
+}
+
+if [ "$1" != "" ]; then
+    test_subdirectory "$1"
+    exit
+fi
+
+for subdirectory in */; do
+    test_subdirectory "$subdirectory"
+done
+echo -e "\nTOTAL RESULTS: $total_correct/$total_count PASS."
