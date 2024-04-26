@@ -54,6 +54,8 @@ import scala.util.Success
 import scala.util.Failure
 import java.util.concurrent.atomic.AtomicInteger
 
+
+
 object CEGAR {
 
   case class AbstractEdge(from : Seq[AbstractState], to : AbstractState,
@@ -126,6 +128,16 @@ class CEGAR[CC <% HornClauses.ConstraintClause]
   for ((clause@NormClause(constraint, Seq(), _), _) <- normClauses)
     nextToProcess.enqueue(List(), clause, constraint)
 
+
+  // Simple log function to use during development
+  def log(msg: String, args: Any*) = {
+    var shouldLog = false
+
+    if(shouldLog) {
+      println(msg.format(args: _*))
+    }
+  }
+
   //////////////////////////////////////////////////////////////////////////////
   // The main loop
 
@@ -154,15 +166,15 @@ class CEGAR[CC <% HornClauses.ConstraintClause]
       if (!resultsQueue.isEmpty()) {
         // we have a result that needs to be handled
         val result = resultsQueue.poll()
-        println("Handling result")
+        log("Handling result")
 
         result match {
           case Left(edge) => {
-            println("Got edge")
+            log("Got edge")
             addEdge(edge)
           }
           case Right((Counterexample(from, clause), states, _, assumptions, n)) => {
-            println("Got Counterexample")
+            log("Got Counterexample")
             if (postponedExpansionCount > nextToProcess.size)
               throw new Exception("Predicate generation failed")
 
@@ -210,39 +222,39 @@ class CEGAR[CC <% HornClauses.ConstraintClause]
           if (states exists (backwardSubsumedStates contains _)) {
             postponedExpansions += expansion
           } else {
-            println("Starting future")
+            log("Starting future")
             val n = activeTasks.incrementAndGet()
-            println("Active tasks incremented to: " + n)
+            log("Active tasks incremented to: " + n)
             Future {
               genEdge(clause, states, assumptions)
             }.onComplete {
               case Success(res) => {
                 res match {
                   case Some(edge) => {
-                    println("Future completed, got edge")
+                    log("Future completed, got edge")
                     resultsQueue.offer(Left(edge))
                   }
                   case None => {
-                    println("Future completed, no edge")
+                    log("Future completed, no edge")
                   }
                 }
                 val n = activeTasks.decrementAndGet()
-                println("Active tasks decremented to: " + n)
+                log("Active tasks decremented to: " + n)
               }
               case Failure(exception) => {
                 exception match {
                   case Counterexample(from, clause) => {
-                    println("Future completed, got edge")
+                    log("Future completed, got edge")
                     resultsQueue.offer(Right((Counterexample(from, clause), states, clause, assumptions, n)))
                   }
                   case _ => {
                     // TODO: what to do here ?
-                    println("Exception: " + exception)
+                    log("Exception: " + exception)
                     throw exception
                   }
                 }
                 val nTasks = activeTasks.decrementAndGet()
-                println("Active tasks decremented to: " + nTasks)
+                log("Active tasks decremented to: " + nTasks)
               }
             }
           }
