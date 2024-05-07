@@ -159,6 +159,7 @@ class CEGAR[CC <% HornClauses.ConstraintClause]
     var postponedExpansionCount = 0
 
     def handleCounterexample(from : Seq[AbstractState], clause : NormClause, states : Seq[AbstractState], assumptions : Conjunction, n : Int) = {
+      log("Handling counterexample")
       if (postponedExpansionCount > nextToProcess.size)
         throw new Exception("Predicate generation failed")
 
@@ -200,26 +201,29 @@ class CEGAR[CC <% HornClauses.ConstraintClause]
     }
 
     def handleEdge(edge : AbstractEdge) = {
+      log("Handling edge")
       addEdge(edge)
     }
 
-    // dont exit if resultsQueue is not empty
-    while ((!nextToProcess.isEmpty || activeTasks.get() > 0 || !edgeResults.isEmpty() || !cexResults.isEmpty()) && res == null) {
+    def counterexampleReady() = {
+      !cexResults.isEmpty()
+    }
+
+    def edgeReady() = {
+      !edgeResults.isEmpty()
+    }
+
+    while ((!nextToProcess.isEmpty || activeTasks.get() > 0 || edgeReady() || counterexampleReady()) && res == null) {
       lazabs.GlobalParameters.get.timeoutChecker()
 
-      if (!edgeResults.isEmpty() || !cexResults.isEmpty()) {
-        log("Handling result")
-        // if there is a counterexample, wait until all active tasks are done
-        if (!cexResults.isEmpty() && activeTasks.get() > 0) {
+      if (edgeReady() || counterexampleReady()) {
+        if (counterexampleReady() && activeTasks.get() > 0) {
           log("Got a counterexample, waiting for all active tasks to finish. Active tasks: " + activeTasks.get())
-          // changing this delay to 100ms seems to remove the stack overflow issue
-          // TODO: handle this in a better way without havng to have a big delay here
-          Thread.sleep(100)
         }
 
-        if (!edgeResults.isEmpty()) {
-          addEdge(edgeResults.poll())
-        } else if (!cexResults.isEmpty()) {
+        if (edgeReady()) {
+          handleEdge(edgeResults.poll())
+        } else if (counterexampleReady() && activeTasks.get() == 0) {
           val (Counterexample(from, clause), states, _, assumptions, n) = cexResults.poll()
           handleCounterexample(from, clause, states, assumptions, n)
         }
