@@ -158,6 +158,51 @@ class CEGAR[CC <% HornClauses.ConstraintClause]
 
     var postponedExpansionCount = 0
 
+    def handleCounterexample(from : Seq[AbstractState], clause : NormClause, states : Seq[AbstractState], assumptions : Conjunction, n : Int) = {
+      if (postponedExpansionCount > nextToProcess.size)
+        throw new Exception("Predicate generation failed")
+
+      val clauseDag = extractCounterexample(from, clause)
+      iterationNum = iterationNum + 1
+
+      if (lazabs.GlobalParameters.get.log) {
+        println
+        print("Found counterexample #" + iterationNum + ", refining ... ")
+
+        if (lazabs.GlobalParameters.get.logCEX) {
+          println
+          clauseDag.prettyPrint
+        }
+      }
+
+      {
+        val predStartTime = System.currentTimeMillis
+        val preds = predicateGenerator(clauseDag)
+        predicateGeneratorTime =
+          predicateGeneratorTime + System.currentTimeMillis - predStartTime
+        preds
+      } match {
+        case Right(trace) => {
+          if (lazabs.GlobalParameters.get.log)
+            print(" ... failed, counterexample is genuine")
+          val clauseMapping = normClauses.toMap
+          res = Right(for (p <- trace) yield (p._1, clauseMapping(p._2)))
+        }
+        case Left(newPredicates) => {
+          if (lazabs.GlobalParameters.get.log)
+            println(" ... adding predicates:")
+          if (addPredicates(newPredicates, (states, clause, assumptions, n)))
+            postponedExpansionCount = 0
+          else
+            postponedExpansionCount = postponedExpansionCount + 1
+        }
+      }
+    }
+
+    def handleEdge(edge : AbstractEdge) = {
+      addEdge(edge)
+    }
+
     // dont exit if resultsQueue is not empty
     while ((!nextToProcess.isEmpty || activeTasks.get() > 0 || !edgeResults.isEmpty() || !cexResults.isEmpty()) && res == null) {
       lazabs.GlobalParameters.get.timeoutChecker()
@@ -173,52 +218,14 @@ class CEGAR[CC <% HornClauses.ConstraintClause]
         }
 
         if (!edgeResults.isEmpty()) {
-          log("Adding edge to graph")
           addEdge(edgeResults.poll())
         } else if (!cexResults.isEmpty()) {
-          log("Handling counterexample")
           val (Counterexample(from, clause), states, _, assumptions, n) = cexResults.poll()
-          
-          if (postponedExpansionCount > nextToProcess.size)
-            throw new Exception("Predicate generation failed")
-
-          val clauseDag = extractCounterexample(from, clause)
-          iterationNum = iterationNum + 1
-
-          if (lazabs.GlobalParameters.get.log) {
-            println
-            print("Found counterexample #" + iterationNum + ", refining ... ")
-
-            if (lazabs.GlobalParameters.get.logCEX) {
-              println
-              clauseDag.prettyPrint
-            }
-          }
-      
-          {
-            val predStartTime = System.currentTimeMillis
-            val preds = predicateGenerator(clauseDag)
-            predicateGeneratorTime =
-              predicateGeneratorTime + System.currentTimeMillis - predStartTime
-            preds
-          } match {
-            case Right(trace) => {
-              if (lazabs.GlobalParameters.get.log)
-                print(" ... failed, counterexample is genuine")
-              val clauseMapping = normClauses.toMap
-              res = Right(for (p <- trace) yield (p._1, clauseMapping(p._2)))
-            }
-            case Left(newPredicates) => {
-              if (lazabs.GlobalParameters.get.log)
-                println(" ... adding predicates:")
-              if (addPredicates(newPredicates, (states, clause, assumptions, n)))
-                postponedExpansionCount = 0
-              else
-                postponedExpansionCount = postponedExpansionCount + 1
-            }
-          }
+          handleCounterexample(from, clause, states, assumptions, n)
         }
+        
       } else {
+        
         if (!nextToProcess.isEmpty) {
           val expansion@(states, clause, assumptions, n) = nextToProcess.dequeue
 
@@ -247,7 +254,7 @@ class CEGAR[CC <% HornClauses.ConstraintClause]
               case Failure(exception) => {
                 exception match {
                   case Counterexample(from, clause) => {
-                    log("Future completed, got edge")
+                    log("Future completed, got counterexample")
                     cexResults.offer((Counterexample(from, clause), states, clause, assumptions, n))
                   }
                   case _ => {
