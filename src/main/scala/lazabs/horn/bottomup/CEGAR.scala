@@ -167,7 +167,9 @@ class CEGAR[CC <% HornClauses.ConstraintClause]
         // if there is a counterexample, wait until all active tasks are done
         if (!cexResults.isEmpty() && activeTasks.get() > 0) {
           log("Got a counterexample, waiting for all active tasks to finish. Active tasks: " + activeTasks.get())
-          Thread.sleep(10)
+          // changing this delay to 100ms seems to remove the stack overflow issue
+          // TODO: handle this in a better way without havng to have a big delay here
+          Thread.sleep(100)
         }
 
         if (!edgeResults.isEmpty()) {
