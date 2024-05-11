@@ -139,6 +139,17 @@ class CEGAR[CC <% HornClauses.ConstraintClause]
     }
   }
 
+  // TODO: Should probably some other datastructure than a queue if i need the last element
+  def getLastCounterexample(): Tuple5[Counterexample, Seq[AbstractState], NormClause, Conjunction, Int] = {
+    var last: Tuple5[Counterexample, Seq[AbstractState], NormClause, Conjunction, Int] = null
+
+    while(!cexResults.isEmpty()) {
+      last = cexResults.poll()
+    }
+
+    return last
+  }
+
   //////////////////////////////////////////////////////////////////////////////
   // The main loop
 
@@ -224,7 +235,7 @@ class CEGAR[CC <% HornClauses.ConstraintClause]
         if (edgeReady()) {
           handleEdge(edgeResults.poll())
         } else if (counterexampleReady() && activeTasks.get() == 0) {
-          val (Counterexample(from, clause), states, _, assumptions, n) = cexResults.poll()
+          val (Counterexample(from, clause), states, _, assumptions, n) = getLastCounterexample()
           handleCounterexample(from, clause, states, assumptions, n)
         }
         
