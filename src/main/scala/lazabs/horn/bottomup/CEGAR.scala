@@ -132,22 +132,25 @@ class CEGAR[CC <% HornClauses.ConstraintClause]
 
   // Simple log function to use during development
   def log(msg: String, args: Any*) = {
-    var shouldLog = false
+    var shouldLog = true
 
     if(shouldLog) {
       println(msg.format(args: _*))
     }
   }
 
-  // TODO: Should probably some other datastructure than a queue if i need the last element
   def getLastCounterexample(): Tuple5[Counterexample, Seq[AbstractState], NormClause, Conjunction, Int] = {
-    var last: Tuple5[Counterexample, Seq[AbstractState], NormClause, Conjunction, Int] = null
-
     while(!cexResults.isEmpty()) {
-      last = cexResults.poll()
+      var current@(cex,states,clause,assumptions,n): Tuple5[Counterexample, Seq[AbstractState], NormClause, Conjunction, Int] = cexResults.poll()
+      if(cexResults.isEmpty()) {
+        return current
+      } else {
+        log("Adding readding counterexample back to queue")
+        nextToProcess.enqueue(states, clause, assumptions)
+      }
     }
-
-    return last
+    log("No counterexample found")
+    return null; // should never happen
   }
 
   //////////////////////////////////////////////////////////////////////////////
