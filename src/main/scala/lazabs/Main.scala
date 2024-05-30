@@ -142,6 +142,7 @@ class GlobalParameters extends Cloneable {
   var verifyInterpolants = false
   var minePredicates = false
   var timeoutChecker : () => Unit = () => ()
+  var parallelCEGAR = false
 
   def needFullSolution = assertions || displaySolutionProlog || displaySolutionSMT
   def needFullCEX = assertions || plainCEX || !pngNo
@@ -503,6 +504,7 @@ object Main {
       case "-cexSimplified" :: rest => simplifiedCEX = true; arguments(rest)
       case "-assert" :: rest => GlobalParameters.get.assertions = true; arguments(rest)
       case "-verifyInterpolants" :: rest => verifyInterpolants = true; arguments(rest)
+      case "-parallelCEGAR" :: rest => parallelCEGAR = true; arguments(rest)
       case "-h" :: rest => println(greeting + "\n\nUsage: eld [options] file\n\n" +
           "General options:\n" +
           " -h                Show this information\n" +
