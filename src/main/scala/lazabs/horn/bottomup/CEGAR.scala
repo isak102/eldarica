@@ -231,6 +231,9 @@ class CEGAR[CC <% HornClauses.ConstraintClause]
       if (edgeReady() || counterexampleReady()) {
         if (counterexampleReady() && activeTasks.get() > 0) {
           // log("Got a counterexample, waiting for all active tasks to finish. Active tasks: " + activeTasks.get())
+          while(activeTasks.get() > 0) {
+            Thread.sleep(50)
+          }
         }
 
         if (edgeReady()) {
