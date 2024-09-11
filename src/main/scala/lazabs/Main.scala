@@ -143,6 +143,7 @@ class GlobalParameters extends Cloneable {
   var minePredicates = false
   var timeoutChecker : () => Unit = () => ()
   var parallelCEGAR = false
+  var parallelCEGARNumMaxThreads : Int = 4
 
   def needFullSolution = assertions || displaySolutionProlog || displaySolutionSMT
   def needFullCEX = assertions || plainCEX || !pngNo
@@ -505,6 +506,12 @@ object Main {
       case "-assert" :: rest => GlobalParameters.get.assertions = true; arguments(rest)
       case "-verifyInterpolants" :: rest => verifyInterpolants = true; arguments(rest)
       case "-parallelCEGAR" :: rest => parallelCEGAR = true; arguments(rest)
+
+      case numMaxThreads :: rest if (numMaxThreads startsWith "-parallelCEGARNumMaxThreads:") => {
+        parallelCEGARNumMaxThreads = numMaxThreads.drop(28).toInt
+        arguments(rest)
+      }
+
       case "-h" :: rest => println(greeting + "\n\nUsage: eld [options] file\n\n" +
           "General options:\n" +
           " -h                Show this information\n" +

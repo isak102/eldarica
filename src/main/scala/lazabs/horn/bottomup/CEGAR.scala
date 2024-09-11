@@ -243,7 +243,7 @@ class CEGAR[CC <% HornClauses.ConstraintClause]
           handleCounterexample(from, clause, states, assumptions, n)
         }
         
-      } else {
+      } else if (activeTasks.get() < lazabs.GlobalParameters.get.parallelCEGARNumMaxThreads) {
         
         if (!nextToProcess.isEmpty) {
           val expansion@(states, clause, assumptions, n) = nextToProcess.dequeue
