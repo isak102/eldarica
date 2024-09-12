@@ -171,7 +171,9 @@ class HornPredAbsContextImpl[CC <% HornClauses.ConstraintClause]
   val plugins =
     for (t <- theories; p <- t.plugin.toSeq) yield p
 
-  val useHashing =
+  val useHashing = if (lazabs.GlobalParameters.get.disableHasher) {
+    false
+  } else {
     (theories forall {
        case ap.types.TypeTheory                 => true
        case ap.theories.GroebnerMultiplication  => true
@@ -185,6 +187,7 @@ class HornPredAbsContextImpl[CC <% HornClauses.ConstraintClause]
        case adt : ap.theories.ADT               => adt.isEnum contains false
        case _                                   => false
      })
+  }
 
   if (useHashing)
     println("State hashing enabled")
